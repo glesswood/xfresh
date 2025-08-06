@@ -102,6 +102,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+        <dependency>
+            <groupId>pl.piomin.services</groupId>   <!-- 跟父 pom 一致 -->
+            <artifactId>shop-common</artifactId>
+            <version>${project.version}</version>   <!-- 继承父 pom 的版本即可 -->
+        </dependency>
     </dependencies>
 
     <build>

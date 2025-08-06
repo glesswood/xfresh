@@ -29,7 +29,7 @@
         <module>discovery-service</module>
         <module>config-service</module>
         <module>employee-service</module>
-        <module>organization-service</module>
+        <module>shop-common</module>
         <module>gateway-service</module>
         <module>product-service</module>
         <module>order-service</module>

@@ -1,7 +1,7 @@
 package com.xfresh.stock.service.Impl;
 
-import com.xfresh.stock.dto.StockDTO;
-import com.xfresh.stock.dto.cmd.StockDeductCmd;
+import com.xfresh.order.dto.StockDTO;
+import com.xfresh.order.dto.cmd.StockDeductCmd;
 import com.xfresh.stock.entity.Stock;
 import com.xfresh.stock.mapper.StockMapper;
 import com.xfresh.stock.repository.StockRepository;

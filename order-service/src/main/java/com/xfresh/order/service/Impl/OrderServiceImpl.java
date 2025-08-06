@@ -1,7 +1,6 @@
 package com.xfresh.order.service.Impl;   // impl 首字母小写习惯
 
 import com.xfresh.order.client.StockFeign;
-import com.xfresh.order.constant.OrderStatus;
 import com.xfresh.order.dto.OrderDTO;
 import com.xfresh.order.dto.cmd.OrderCreateCmd;
 import com.xfresh.order.dto.cmd.StockDeductCmd;
@@ -33,30 +32,48 @@ public class OrderServiceImpl implements OrderService {
     private final OrderMapper mapper;
     private final OrderEventPublisher publisher;
 
-    /* ========== 创建订单 ========== */
+    /* ========== 创建订单 ========== *//*
     @Transactional
     @Override
     public OrderDTO create(OrderCreateCmd cmd) {
 
-        /* 0) 组装扣库存命令 */
+        *//* 0) 组装扣库存命令 *//*
         StockDeductCmd sdCmd = new StockDeductCmd(
                 cmd.getItems().stream()
                         .map(i -> new StockDeductCmd.Item(i.getProductId(), i.getQuantity()))
                         .toList()
         );
 
-        /* 1) 锁库存 —— 失败抛异常，事务整体回滚 */
+        *//* 1) 锁库存 —— 失败抛异常，事务整体回滚 *//*
         stockFeign.lock(sdCmd);
 
-        /* 2) 保存订单 */
+        *//* 2) 保存订单 *//*
         Order entity = mapper.toEntity(cmd);
         entity.setOrderNo(genOrderNo());
         entity.setStatus(OrderStatus.PENDING);
         Order saved = orderRepo.save(entity);
 
-        /* 3) 返回 DTO */
+        *//* 3) 返回 DTO *//*
         return mapper.toDto(saved);
     }
+*/
+    @Override
+    public OrderDTO create(OrderCreateCmd cmd) {
+        /* 1. 预占库存（Lua 脚本已实现） */
+        stockFeign.lock(toDeductCmd(cmd));
+
+        /* 2. 保存订单 */
+        Order entity = mapper.toEntity(cmd);
+        entity.setStatus(1);                       // 1=待支付
+        Order saved = orderRepo.save(entity);
+
+        OrderDTO dto = mapper.toDto(saved);
+
+        /* 3. 事件通知 */
+        publisher.created(dto);
+        return dto;
+    }
+
 
     /* ========== 查询 ========== */
     @Override
@@ -72,24 +89,16 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /* ========== 取消订单 ========== */
-    @Transactional
     @Override
     public OrderDTO cancel(Long id) {
+        Order o = orderRepo.findById(id).orElseThrow();
+        if (o.getStatus() != 1) throw new IllegalStateException("非待支付订单不能取消");
+        o.setStatus(0);                                // 0=已取消
+        orderRepo.save(o);
 
-        Order order = orderRepo.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("订单不存在"));
-
-        // 只有待支付才能取消
-        if (order.getStatus() != OrderStatus.PENDING) {
-            throw new IllegalStateException("仅待支付订单可取消");
-        }
-
-        // 回滚库存
-        stockFeign.rollback(order.getId(), order.itemsToStockCmd());
-
-        // 更新状态
-        order.setStatus(OrderStatus.CANCELLED);
-        return mapper.toDto(order);
+        stockFeign.rollback(id, o.itemsToStockCmd());  // 归还库存
+        publisher.cancelled(mapper.toDto(o));
+        return mapper.toDto(o);
     }
 
     /* ========== 工具方法 ========== */
@@ -101,5 +110,14 @@ public class OrderServiceImpl implements OrderService {
     private String genOrderNo() {
         return FMT.format(LocalDateTime.now())
                 + String.format("%06d", RANDOM.nextInt(1_000_000));
+    }
+
+    private StockDeductCmd toDeductCmd(OrderCreateCmd cmd) {
+        StockDeductCmd sdCmd = new StockDeductCmd(
+                cmd.getItems().stream()
+                        .map(i -> new StockDeductCmd.Item(i.getProductId(), i.getQuantity()))
+                        .toList()
+        );
+        return sdCmd;
     }
 }

@@ -1,7 +1,7 @@
 package com.xfresh.stock.service;
 
-import com.xfresh.stock.dto.StockDTO;
-import com.xfresh.stock.dto.cmd.StockDeductCmd;
+import com.xfresh.order.dto.StockDTO;
+import com.xfresh.order.dto.cmd.StockDeductCmd;
 
 import java.util.List;
 
