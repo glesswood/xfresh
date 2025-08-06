@@ -8,9 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import pl.piomin.services.department.client.EmployeeClient;
-import pl.piomin.services.department.model.Department;
-import pl.piomin.services.department.model.Employee;
+import com.xfresh.product.client.EmployeeClient;
+import com.xfresh.product.model.Department;
+import com.xfresh.product.model.Employee;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {

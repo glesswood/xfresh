@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.util.Assert;
-import pl.piomin.services.department.model.Department;
-import pl.piomin.services.department.repository.DepartmentRepository;
+import com.xfresh.product.model.Department;
+import com.xfresh.product.repository.DepartmentRepository;
 
 import java.util.List;
 

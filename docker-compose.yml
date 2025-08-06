@@ -89,3 +89,28 @@ services:
       - department-service
       - organization-service
       - zipkin
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: microservice
+    ports:
+      - "3306:3306"
+
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  nacos:
+    image: nacos/nacos-server
+    ports:
+      - "8848:8848"
+    environment:
+      MODE: standalone

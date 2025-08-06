@@ -1,0 +1,25 @@
+# application.yml  (建议把 import 放到最外层，最不容易缩进错)
+spring.config.import: optional:nacos:product-service.yaml   # ← 全部 ASCII 字符
+
+spring:
+  application:
+    name: product-service
+
+  cloud:
+    nacos:
+      server-addr: 127.0.0.1:8848
+      config:
+        namespace: 9aeeee1d-d284-44f8-91f2-d2c603fe916b         # 和控制台一致
+        group: DEFAULT_GROUP    # 不写就默认为这个
+        file-extension: yaml
+      discovery:
+        namespace: 9aeeee1d-d284-44f8-91f2-d2c603fe916b
+  datasource:
+    url: jdbc:mysql://localhost:3306/microservice
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update   # dev 环境用 update/create-drop
+    show-sql: true
