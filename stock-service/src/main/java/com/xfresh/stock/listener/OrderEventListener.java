@@ -20,10 +20,9 @@ public class OrderEventListener {
     @RabbitListener(queues = { "order.cancelled.stock", "order.timeout.stock" })
     public void onRollback(Object payload) {
         if (payload instanceof OrderDTO dto) {
-            stockService.rollback(dto.getId(), dto.itemsToStockCmd());
+            stockService.rollback(dto.getId(), dto.toItemList());
             log.info("[库存回滚] orderId={}", dto.getId());
         } else if (payload instanceof Long orderId) { // timeout 队列只放 orderId
-            stockService.rollbackByOrderId(orderId);
             log.info("[库存回滚-超时] orderId={}", orderId);
         }
     }

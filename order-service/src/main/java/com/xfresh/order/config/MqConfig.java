@@ -1,7 +1,10 @@
 package com.xfresh.order.config;
 // src/main/java/com/xfresh/order/config/MqConfig.java
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -42,5 +45,10 @@ public class MqConfig {
     @Bean Binding timeoutBind(TopicExchange orderExchange) {
         return BindingBuilder.bind(timeoutQ())
                 .to(orderExchange).with("order.timeout");
+    }
+    /** 使用 Jackson 把 POJO ↔︎ JSON */
+    @Bean
+    public MessageConverter jackson2Converter(ObjectMapper mapper) {
+        return new Jackson2JsonMessageConverter(mapper);
     }
 }

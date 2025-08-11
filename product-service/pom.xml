@@ -107,6 +107,11 @@
             <artifactId>shop-common</artifactId>
             <version>${project.version}</version>   <!-- 继承父 pom 的版本即可 -->
         </dependency>
+        <!--openfeign依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

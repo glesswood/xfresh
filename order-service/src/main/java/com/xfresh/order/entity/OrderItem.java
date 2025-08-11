@@ -5,6 +5,9 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,13 +18,21 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class OrderItem {
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "order_id")
-    private Order order;
-    @Column(name = "product_id") private Long productId;
-    private BigDecimal price;
+
+    private Long productId;
     private Integer quantity;
-    @Column(name = "create_time") private LocalDateTime createTime;
-    @Column(name = "update_time") private LocalDateTime updateTime;
+    private BigDecimal price;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    @ToString.Exclude       // 防止循环 toString
+    private Order order;
+
+    @CreationTimestamp
+    private LocalDateTime createTime;
+    @UpdateTimestamp
+    private LocalDateTime updateTime;
 }

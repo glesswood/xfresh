@@ -2,6 +2,8 @@ package com.xfresh.stock.service;
 
 import com.xfresh.order.dto.StockDTO;
 import com.xfresh.order.dto.cmd.StockDeductCmd;
+import com.xfresh.order.dto.cmd.StockInitCmd;
+import com.xfresh.stock.entity.Stock;
 
 import java.util.List;
 
@@ -17,4 +19,9 @@ public interface StockService {
     void rollback(Long orderId, List<StockDeductCmd.Item> items);
 
     StockDTO getByProductId(Long productId);
+
+    /**
+     * 初始化（或重置）某个商品的可用库存
+     */
+    Stock init(StockInitCmd cmd);
 }

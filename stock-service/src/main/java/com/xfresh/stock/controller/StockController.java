@@ -1,10 +1,13 @@
 package com.xfresh.stock.controller;
 
 import com.xfresh.common.ApiResponse;
-import com.xfresh.stock.dto.StockDTO;
-import com.xfresh.stock.dto.cmd.StockDeductCmd;
+import com.xfresh.order.dto.StockDTO;
+import com.xfresh.order.dto.cmd.StockDeductCmd;
+import com.xfresh.order.dto.cmd.StockInitCmd;
 import com.xfresh.stock.entity.Stock;
+import com.xfresh.stock.mapper.StockMapper;
 import com.xfresh.stock.service.StockService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,12 +18,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StockController {
 
-    private final StockService service;
+    private final StockService stockService;
+    private final StockMapper mapper;
 
     /* 查询库存 */
     @GetMapping("/{pid}")
     public ApiResponse<StockDTO> get(@PathVariable Long pid) {
-        return ApiResponse.ok(service.getByProductId(pid));
+        return ApiResponse.ok(stockService.getByProductId(pid));
     }
 
    /* *//* 管理后台：直接修改库存（演示用） *//*
@@ -34,7 +38,7 @@ public class StockController {
     /** ① Try：锁定库存 */
     @PostMapping("/lock")
     public ApiResponse<Void> lock(@RequestBody StockDeductCmd cmd){
-        service.deductAndLock(cmd);
+        stockService.lock(cmd);
         return ApiResponse.ok();
     }
 
@@ -42,7 +46,7 @@ public class StockController {
     @PostMapping("/confirm")
     public ApiResponse<Void> confirm(@RequestParam Long orderId,
                                      @RequestBody List<StockDeductCmd.Item> items){
-        service.confirm(orderId, items);
+        stockService.confirm(orderId, items);
         return ApiResponse.ok();
     }
 
@@ -50,7 +54,14 @@ public class StockController {
     @PostMapping("/rollback")
     public ApiResponse<Void> rollback(@RequestParam Long orderId,
                                       @RequestBody List<StockDeductCmd.Item> items){
-        service.rollback(orderId, items);
+        stockService.rollback(orderId, items);
         return ApiResponse.ok();
+    }
+    /*
+    * 初始化*/
+    @PostMapping("/init")
+    public ApiResponse<StockDTO> init(@RequestBody @Valid StockInitCmd cmd) {
+        Stock stock = stockService.init(cmd);
+        return ApiResponse.ok(mapper.toDto(stock));
     }
 }

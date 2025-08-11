@@ -1,5 +1,6 @@
 package com.xfresh.order.dto;
 
+import com.xfresh.order.dto.cmd.StockDeductCmd;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -17,4 +18,10 @@ public class OrderDTO {
     private LocalDateTime updateTime;
 
     private List<OrderItemDTO> items;    // 子表
+    public List<StockDeductCmd.Item> toItemList() {
+        return this.getItems().stream()
+                .map(i -> new StockDeductCmd.Item(i.getProductId(), i.getQuantity()))
+                .toList();
+    }
+
 }

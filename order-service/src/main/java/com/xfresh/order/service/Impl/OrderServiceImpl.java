@@ -1,10 +1,14 @@
 package com.xfresh.order.service.Impl;   // impl 首字母小写习惯
 
+import com.xfresh.common.ApiResponse;
+import com.xfresh.order.client.ProductFeign;
 import com.xfresh.order.client.StockFeign;
 import com.xfresh.order.dto.OrderDTO;
+import com.xfresh.order.dto.ProductDTO;
 import com.xfresh.order.dto.cmd.OrderCreateCmd;
 import com.xfresh.order.dto.cmd.StockDeductCmd;
 import com.xfresh.order.entity.Order;
+import com.xfresh.order.entity.OrderItem;
 import com.xfresh.order.event.OrderEventPublisher;
 import com.xfresh.order.mapper.OrderMapper;
 import com.xfresh.order.repository.OrderRepository;
@@ -17,8 +21,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 @Slf4j
@@ -31,6 +38,7 @@ public class OrderServiceImpl implements OrderService {
     private final StockFeign stockFeign;
     private final OrderMapper mapper;
     private final OrderEventPublisher publisher;
+    private final ProductFeign productFeign;
 
     /* ========== 创建订单 ========== *//*
     @Transactional
@@ -57,21 +65,59 @@ public class OrderServiceImpl implements OrderService {
         return mapper.toDto(saved);
     }
 */
+    @Transactional
     @Override
     public OrderDTO create(OrderCreateCmd cmd) {
-        /* 1. 预占库存（Lua 脚本已实现） */
+
+        /* ---------- 1. 预占库存 ---------- */
         stockFeign.lock(toDeductCmd(cmd));
 
-        /* 2. 保存订单 */
-        Order entity = mapper.toEntity(cmd);
-        entity.setStatus(1);                       // 1=待支付
-        Order saved = orderRepo.save(entity);
+        /* ---------- 2. 组装订单实体 ---------- */
+        Order order = new Order();
+        order.setUserId(cmd.getUserId());
+        order.setOrderNo(genOrderNo());
+        order.setStatus(1);                                  // 1 = 待支付
+        order.setCreateTime(LocalDateTime.now());
+        order.setUpdateTime(LocalDateTime.now());
 
-        OrderDTO dto = mapper.toDto(saved);
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        List<OrderItem> items = new ArrayList<>();
 
-        /* 3. 事件通知 */
-        publisher.created(dto);
-        return dto;
+        for (OrderCreateCmd.ItemCmd itemCmd : cmd.getItems()) {
+
+            // 2.1 远程查商品价格（包装体 → getData()）
+            ApiResponse<ProductDTO> resp = productFeign.getById(itemCmd.getProductId());
+            ProductDTO product = resp.getData();
+            if (product == null || product.getPrice() == null) {
+                throw new IllegalStateException("获取商品价格失败，productId=" + itemCmd.getProductId());
+            }
+
+            // 2.2 计算金额 & 组装明细
+            BigDecimal subTotal = product.getPrice().multiply(BigDecimal.valueOf(itemCmd.getQuantity()));
+            totalAmount = totalAmount.add(subTotal);
+
+            OrderItem oi = new OrderItem();
+            oi.setProductId(itemCmd.getProductId());
+            oi.setQuantity(itemCmd.getQuantity());
+            oi.setPrice(product.getPrice());
+            oi.setCreateTime(LocalDateTime.now());
+            oi.setUpdateTime(LocalDateTime.now());
+            oi.setOrder(order);          // 关键：维护双向关系
+
+            items.add(oi);
+        }
+
+        order.setTotalAmount(totalAmount);
+        order.setItems(items);           // 关键：让 JPA 级联保存明细
+
+        /* ---------- 3. 落库 ---------- */
+        Order saved = orderRepo.save(order);
+
+        /* ---------- 4. MQ 事件 ---------- */
+        publisher.created(mapper.toDto(saved));
+
+        /* ---------- 5. 返回 DTO ---------- */
+        return mapper.toDto(saved);
     }
 
 

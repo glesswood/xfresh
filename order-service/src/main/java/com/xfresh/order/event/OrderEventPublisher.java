@@ -15,9 +15,11 @@ public class OrderEventPublisher {
     private static final String EX = "order.exchange";
 
     public void created(OrderDTO dto) {
-        rabbit.convertAndSend(EX, "order.created", dto);
-        // 同时投递一个 TTL 消息用于超时关闭
-        rabbit.convertAndSend(EX, "order.ttl", dto.getId());
+        rabbit.convertAndSend(
+                "order.exchange",          // 交换机
+                "order.created",           // routingKey
+                dto                        // ★ 直接丢对象
+        );
     }
 
     public void cancelled(OrderDTO dto) {

@@ -1,25 +1,20 @@
-# application.yml  (建议把 import 放到最外层，最不容易缩进错)
-spring.config.import: optional:nacos:product-service.yaml   # ← 全部 ASCII 字符
+# application.yml   —— 以 order-service 为例，stock/product 只改 ❶❷ 即可
+spring.config.import: optional:nacos:${spring.application.name}.yaml   # 引入远端配置
+
+server:
+  port: 8081            # ❶ 端口，stock 改 8082、product 改 8081…
+  address: 127.0.0.1    # 只监听回环口
 
 spring:
   application:
-    name: product-service
-
+    name: product-service   # ❷ 服务名（与 Feign/Nacos 注册一致）
   cloud:
     nacos:
       server-addr: 127.0.0.1:8848
-      config:
-        namespace: 9aeeee1d-d284-44f8-91f2-d2c603fe916b         # 和控制台一致
-        group: DEFAULT_GROUP    # 不写就默认为这个
-        file-extension: yaml
       discovery:
         namespace: 9aeeee1d-d284-44f8-91f2-d2c603fe916b
-  datasource:
-    url: jdbc:mysql://localhost:3306/microservice
-    username: root
-    password: 123456
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update   # dev 环境用 update/create-drop
-    show-sql: true
+        ip: 127.0.0.1       # 👈 强制注册到 127.0.0.1
+      config:
+        namespace: 9aeeee1d-d284-44f8-91f2-d2c603fe916b
+        group: DEFAULT_GROUP
+        file-extension: yaml

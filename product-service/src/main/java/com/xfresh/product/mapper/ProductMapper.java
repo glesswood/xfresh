@@ -7,7 +7,7 @@ import org.mapstruct.*;
 
 @Mapper(componentModel = "spring")
 public interface ProductMapper {
-
+    @Mapping(target = "price", source = "price")
     ProductDTO toDto(Product entity);
 
     Product toEntity(ProductCreateCmd cmd);
