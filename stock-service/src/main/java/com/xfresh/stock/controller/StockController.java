@@ -1,9 +1,9 @@
 package com.xfresh.stock.controller;
 
 import com.xfresh.common.ApiResponse;
-import com.xfresh.order.dto.StockDTO;
-import com.xfresh.order.dto.cmd.StockDeductCmd;
-import com.xfresh.order.dto.cmd.StockInitCmd;
+import com.xfresh.dto.StockDTO;
+import com.xfresh.dto.cmd.StockDeductCmd;
+import com.xfresh.dto.cmd.StockInitCmd;
 import com.xfresh.stock.entity.Stock;
 import com.xfresh.stock.mapper.StockMapper;
 import com.xfresh.stock.service.StockService;

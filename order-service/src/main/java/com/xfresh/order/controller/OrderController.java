@@ -1,7 +1,8 @@
 package com.xfresh.order.controller;
 
-import com.xfresh.order.dto.OrderDTO;
-import com.xfresh.order.dto.cmd.OrderCreateCmd;
+import com.xfresh.dto.OrderDTO;
+import com.xfresh.dto.cmd.OrderCreateCmd;
+import com.xfresh.exception.DuplicateRequestException;
 import com.xfresh.order.service.OrderService;
 import com.xfresh.common.ApiResponse;          // 统一返回包装
 import jakarta.validation.Valid;
@@ -19,7 +20,8 @@ public class OrderController {
 
 
     @PostMapping
-    public ApiResponse<OrderDTO> create(@RequestBody @Valid OrderCreateCmd cmd) {
+    public ApiResponse<OrderDTO> create(
+            @Valid @RequestBody OrderCreateCmd cmd) {
         return ApiResponse.ok(service.create(cmd));
     }
 
@@ -38,5 +40,16 @@ public class OrderController {
             @RequestParam Long userId,
             Pageable pageable) {
         return ApiResponse.ok(service.pageByUser(userId, pageable));
+    }
+
+    /** 支付成功回调：根据订单ID确认支付并扣减锁定库存 */
+    @PostMapping("/{id}/pay-success")
+    public ApiResponse<OrderDTO> paySuccess(@PathVariable Long id) {
+        return ApiResponse.ok(service.paySuccess(id));
+    }
+
+    @GetMapping("/_test/dup")
+    public void testDup() {
+        throw new DuplicateRequestException("测试重复");
     }
 }

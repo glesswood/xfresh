@@ -1,6 +1,6 @@
-package com.xfresh.order.dto;
+package com.xfresh.dto;
 
-import com.xfresh.order.dto.cmd.StockDeductCmd;
+import com.xfresh.dto.cmd.StockDeductCmd;
 import lombok.Data;
 
 import java.math.BigDecimal;

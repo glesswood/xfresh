@@ -9,8 +9,8 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.context.annotation.Bean;
 import com.xfresh.product.repository.ProductRepository;
+@SpringBootApplication(scanBasePackages = "com.xfresh")
 
-@SpringBootApplication
 @OpenAPIDefinition(info =
 	@Info(title = "Product API", version = "1.0", description = "Documentation Product API v1.0")
 )

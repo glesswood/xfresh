@@ -1,6 +1,7 @@
-package com.xfresh.order.dto.cmd;
+package com.xfresh.dto.cmd;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -22,6 +23,10 @@ public class OrderCreateCmd {
      */
     @NotEmpty
     private List<ItemCmd> items;
+
+    @NotBlank                   // 前端生成并传入，同一次重试复用同一个
+    private String requestId;
+
 
     @Data
     @AllArgsConstructor

@@ -1,5 +1,5 @@
 package com.xfresh.order.entity;
-import com.xfresh.order.dto.cmd.StockDeductCmd;
+import com.xfresh.dto.cmd.StockDeductCmd;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -12,6 +12,8 @@ import java.util.List;
 @Entity
 @Table(name = "`order`")
 public class Order {
+    @Column(length = 64)
+    private String requestId;
 
     @Column(name = "order_no")  private String orderNo;
     @Column(name = "user_id")   private Long userId;

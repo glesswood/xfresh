@@ -1,8 +1,7 @@
 package com.xfresh.order.mapper;
 
-import com.xfresh.order.dto.OrderDTO;
-import com.xfresh.order.dto.OrderItemDTO;
-import com.xfresh.order.dto.cmd.OrderCreateCmd;
+import com.xfresh.dto.OrderDTO;
+import com.xfresh.dto.cmd.OrderCreateCmd;
 import com.xfresh.order.entity.Order;
 import com.xfresh.order.entity.OrderItem;
 import org.mapstruct.*;

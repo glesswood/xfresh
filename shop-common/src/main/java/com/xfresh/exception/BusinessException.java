@@ -1,5 +1,5 @@
 // common/BusinessException.java
-package com.xfresh.common;
+package com.xfresh.exception;
 
 import lombok.Getter;
 

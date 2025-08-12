@@ -2,7 +2,7 @@ package com.xfresh.stock.listener;
 
 // src/main/java/com/xfresh/stock/listener/OrderEventListener.java
 
-import com.xfresh.order.dto.OrderDTO;
+import com.xfresh.dto.OrderDTO;
 import com.xfresh.stock.service.StockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

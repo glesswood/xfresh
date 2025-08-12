@@ -1,7 +1,7 @@
 // product/service/impl/ProductServiceImpl.java
 package com.xfresh.product.service.Impl;
 
-import com.xfresh.common.BusinessException;
+import com.xfresh.exception.BusinessException;
 import com.xfresh.product.dto.*;
 import com.xfresh.product.entity.Product;
 import com.xfresh.product.mapper.ProductMapper;

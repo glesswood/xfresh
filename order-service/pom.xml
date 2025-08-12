@@ -122,10 +122,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
+        <!--公共模块-->
         <dependency>
-            <groupId>pl.piomin.services</groupId>   <!-- 跟父 pom 一致 -->
+            <groupId>pl.piomin.services</groupId>
             <artifactId>shop-common</artifactId>
-            <version>${project.version}</version>   <!-- 继承父 pom 的版本即可 -->
+            <version>${project.version}</version>
+        </dependency>
+        <!--redis-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 

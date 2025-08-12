@@ -1,8 +1,8 @@
 package com.xfresh.stock.service.Impl;
 
-import com.xfresh.order.dto.StockDTO;
-import com.xfresh.order.dto.cmd.StockDeductCmd;
-import com.xfresh.order.dto.cmd.StockInitCmd;
+import com.xfresh.dto.StockDTO;
+import com.xfresh.dto.cmd.StockDeductCmd;
+import com.xfresh.dto.cmd.StockInitCmd;
 import com.xfresh.stock.entity.Stock;
 import com.xfresh.stock.exception.StockException;
 import com.xfresh.stock.mapper.StockMapper;
@@ -12,14 +12,15 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -80,7 +81,42 @@ public class StockServiceImpl implements StockService {
     @Transactional
     @Override
     public void confirm(Long orderId, List<StockDeductCmd.Item> items) {
-        log.info("[确认库存] order={}", orderId);
+        log.info("[库存确认] orderId={}, items={}", orderId, items);
+
+        if (items == null || items.isEmpty()) {
+            return; // 没东西就当成功
+        }
+
+        // 1) 合并相同 productId 的数量
+        Map<Long, Integer> need = new HashMap<>();
+        for (var it : items) {
+            if (it.getQuantity() == null || it.getQuantity() <= 0) {
+                throw new StockException("确认数量非法 (productId=" + it.getProductId() + ")");
+            }
+            need.merge(it.getProductId(), it.getQuantity(), Integer::sum);
+        }
+
+        // 2) DB：total_stock -= qty, locked_stock -= qty
+        for (var e : need.entrySet()) {
+            Long pid = e.getKey();
+            int qty  = e.getValue();
+
+            int changed = repo.confirmDeduct(pid, qty,LocalDateTime.now());
+            if (changed == 0) {
+                // 兜底检查当前锁定/总量，便于定位问题
+                Stock s = repo.findById(pid).orElse(null);
+                String hint = (s == null)
+                        ? "库存记录不存在"
+                        : String.format("locked=%d,total=%d,need=%d",
+                        s.getLockedStock(), s.getTotalStock(), qty);
+                throw new StockException("库存确认失败 (productId=" + pid + ", " + hint + ")");
+            }
+        }
+
+        // 3) Redis：**不需要动**（预占时 Redis 的“可用库存”已减少。
+        // confirm 只是把 DB 的锁定转实扣，不回写 Redis，避免反复修改造成不一致）
+
+        log.info("[库存确认] success, orderId={}", orderId);
     }
 
     /** 回滚库存（delta 为正） */

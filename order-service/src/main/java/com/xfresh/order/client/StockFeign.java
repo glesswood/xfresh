@@ -1,7 +1,7 @@
 package com.xfresh.order.client;
 
 import com.xfresh.common.ApiResponse;
-import com.xfresh.order.dto.cmd.StockDeductCmd;
+import com.xfresh.dto.cmd.StockDeductCmd;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

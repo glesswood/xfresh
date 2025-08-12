@@ -1,7 +1,7 @@
 package com.xfresh.order.event;
 // src/main/java/com/xfresh/order/event/OrderEventPublisher.java
 
-import com.xfresh.order.dto.OrderDTO;
+import com.xfresh.dto.OrderDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;

@@ -1,6 +1,6 @@
 package com.xfresh.stock.mapper;
 
-import com.xfresh.order.dto.StockDTO;
+import com.xfresh.dto.StockDTO;
 import com.xfresh.stock.entity.Stock;
 import org.mapstruct.Mapper;
 

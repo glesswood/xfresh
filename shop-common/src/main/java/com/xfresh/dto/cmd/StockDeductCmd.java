@@ -1,4 +1,4 @@
-package com.xfresh.order.dto.cmd;
+package com.xfresh.dto.cmd;
 
 import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;

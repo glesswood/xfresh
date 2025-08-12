@@ -1,5 +1,5 @@
 // product/dto/ProductDTO.java
-package com.xfresh.order.dto;
+package com.xfresh.dto;
 
 import lombok.Data;
 
