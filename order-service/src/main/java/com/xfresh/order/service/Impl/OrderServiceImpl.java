@@ -12,6 +12,7 @@ import com.xfresh.dto.cmd.StockDeductCmd;
 import com.xfresh.order.entity.Order;
 import com.xfresh.order.entity.OrderItem;
 import com.xfresh.order.event.OrderEventPublisher;
+import com.xfresh.order.event.PayTimeoutSender;
 import com.xfresh.order.mapper.OrderMapper;
 import com.xfresh.order.repository.OrderRepository;
 import com.xfresh.order.service.OrderService;
@@ -47,6 +48,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderMapper mapper;
     private final OrderEventPublisher publisher;
     private final ProductFeign productFeign;
+    private final PayTimeoutSender payTimeoutSender;
 
     /* ========== 创建订单 ========== *//*
     @Transactional
@@ -146,6 +148,8 @@ public class OrderServiceImpl implements OrderService {
 
             // ⑥ 发布事件（MQ）
             publisher.created(mapper.toDto(saved));
+            //7 发送延时消息
+            payTimeoutSender.send(saved.getId());
 
             return mapper.toDto(saved);
 
@@ -225,6 +229,7 @@ public class OrderServiceImpl implements OrderService {
                     .orElseThrow(() -> new BusinessException("订单不存在"));
             return mapper.toDto(fresh);
         }
+
 
         // 6) 返回
         Order updated = orderRepo.findById(orderId)
