@@ -1,6 +1,7 @@
 // common/GlobalExceptionHandler.java
 package com.xfresh.exception;
 import com.xfresh.common.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -11,8 +12,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
+@Slf4j
 @RestControllerAdvice(basePackages = "com.xfresh")  // 所有引入 common 的服务都会生效（见第3点）
 public class GlobalExceptionHandler {
+
+
 
     /** 业务异常：返回 200，body 中体现失败（看你现在的 ApiResponse 设计习惯） */
     @ExceptionHandler(BusinessException.class)
@@ -39,12 +43,13 @@ public class GlobalExceptionHandler {
     }
 
     /** 兜底：避免 500 裸奔（仅开发期可打印堆栈） */
-    /*@ExceptionHandler(Exception.class)
+    @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleOther(Exception e) {
-        // log.error("Unhandled ex", e);
+        log.info("Unhandled ex", e);
+
         return ApiResponse.fail("服务器开小差了，请稍后再试");
-    }*/
+    }
     @ExceptionHandler(DuplicateRequestException.class)
     public ResponseEntity<ApiResponse<Void>> handleDuplicate(DuplicateRequestException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)

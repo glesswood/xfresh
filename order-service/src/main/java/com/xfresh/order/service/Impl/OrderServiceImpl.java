@@ -16,6 +16,11 @@ import com.xfresh.order.event.PayTimeoutSender;
 import com.xfresh.order.mapper.OrderMapper;
 import com.xfresh.order.repository.OrderRepository;
 import com.xfresh.order.service.OrderService;
+import feign.FeignException;
+import feign.RetryableException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -215,10 +220,12 @@ public class OrderServiceImpl implements OrderService {
                 .toList();
 
         // 4) 调用 stock-service 的 confirm (锁定 -> 真扣)
-        ApiResponse<Void> resp = stockFeign.confirm(orderId, items);
-        if (resp == null || resp.getCode() != 0) {
-            // 失败直接抛，让事务回滚（不更改订单状态）
-            throw new BusinessException("确认库存失败");
+        try {
+            ApiResponse<Void> resp = stockFeign.confirm(orderId, items);
+            if (resp == null || resp.getCode() != 0) throw new BusinessException("确认库存失败");
+        } catch (FeignException e) {
+            // 转成业务异常，交给全局异常处理器返回 502/503 或 500
+            throw new BusinessException("库存服务不可用，请稍后重试");
         }
 
         // 5) 条件更新：把状态从 1 -> 2，只允许成功一次（并发安全 & 幂等）
@@ -235,6 +242,54 @@ public class OrderServiceImpl implements OrderService {
         Order updated = orderRepo.findById(orderId)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
         return mapper.toDto(updated);
+    }
+
+    /** 封装“锁库”远程调用，附带重试 + 断路器 */
+    @Retry(name = "stockLock")
+    @CircuitBreaker(name = "stock", fallbackMethod = "lockFallback")
+    protected void lockStockWithResilience(StockDeductCmd cmd) {
+        ApiResponse<Void> resp = stockFeign.lock(cmd);
+        if (resp == null || resp.getCode() != 0) {
+            throw new BusinessException("锁定库存失败");
+        }
+    }
+
+    /** fallback 签名：同参数 + Throwable，返回类型同原方法（void） */
+    protected void lockFallback(StockDeductCmd cmd, Throwable ex) {
+        // 记日志（不要打印堆栈太吵，除非打到 debug）
+        log.warn("[stock-lock] fallback triggered, cmd={}, cause={}", cmd, ex.toString());
+        log.error("[lockFallback] 调用库存服务失败, cmd={}, exType={}, msg={}",
+                cmd, ex.getClass().getName(), ex.getMessage(), ex);
+
+        // 尽量还原真实根因
+        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+
+        // 1) 断路器打开（直接拒绝调用）
+        if (cause instanceof CallNotPermittedException) {
+            throw new BusinessException("库存服务暂不可用（熔断中），请稍后再试");
+        }
+
+        // 2) Feign 连接/超时等可重试类问题（已重试仍失败）
+        if (cause instanceof RetryableException) {
+            throw new BusinessException("库存服务网络异常，请稍后重试");
+        }
+
+        // 3) 下游返回了 HTTP 错误
+        if (cause instanceof FeignException fe) {
+            int status = fe.status();
+            // 按你的 stock-service 约定微调：
+            if (status == 409) { // 比如库存不足映射为 409
+                throw new BusinessException("库存不足");
+            }
+            if (status >= 500) {
+                throw new BusinessException("库存服务开小差了，请稍后再试");
+            }
+            // 4xx 其它情况
+            throw new BusinessException("调用库存服务失败(" + status + ")");
+        }
+
+        // 4) 其它未归类异常
+        throw new BusinessException("锁定库存失败：" + cause.getMessage());
     }
 
     /* ========== 工具方法 ========== */

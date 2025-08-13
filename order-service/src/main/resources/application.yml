@@ -1,6 +1,19 @@
 # application.yml   —— 以 order-service 为例，stock/product 只改 ❶❷ 即可
 spring.config.import: optional:nacos:${spring.application.name}.yaml   # 引入远端配置
+# application.yml 里，和 spring:/server: 同级
+logging:
+  level:
+    # Spring Cloud OpenFeign 的调试
+    org.springframework.cloud.openfeign: DEBUG
+    # Feign 的核心日志
+    feign: DEBUG
+    # 负载均衡/重试适配器（可选）
+    org.springframework.cloud.openfeign.loadbalancer: DEBUG
 
+    # Sentinel 熔断适配器调试
+    com.alibaba.cloud.circuitbreaker.sentinel: DEBUG
+    # Sentinel 核心（想更细再开这个）
+    com.alibaba.csp.sentinel: INFO
 server:
   port: 8083            # ❶ 端口，stock 改 8082、product 改 8081…
   address: 127.0.0.1    # 只监听回环口
@@ -18,3 +31,43 @@ spring:
         namespace: 9aeeee1d-d284-44f8-91f2-d2c603fe916b
         group: DEFAULT_GROUP
         file-extension: yaml
+    openfeign:
+      circuitbreaker:
+        enabled: true
+feign:
+  httpclient:
+    enabled: true          # 使用 Apache HttpClient
+    max-connections: 200
+    max-connections-per-route: 50
+  client:
+    config:
+      default:
+        connectTimeout: 2000    # 2s 连接超时
+        readTimeout: 3000        # 3s 读超时
+        # 避免和 Resilience4j 的重试叠加
+        retryer: feign.Retryer$NeverRetry
+
+resilience4j:
+  retry:
+    instances:
+      stockLock:                 # 给“锁库”调用用这个实例名
+        maxAttempts: 3
+        waitDuration: 500ms
+        retryExceptions:
+          - feign.RetryableException   # 推荐：网络/超时映射成它
+          - feign.FeignException       # 兜底（可选）
+        ignoreExceptions:
+          - com.xfresh.exception.BusinessException
+  circuitbreaker:
+    instances:
+      stock:                     # 断路器实例名
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - feign.FeignException
+        ignoreExceptions:
+          - com.xfresh.exception.BusinessException
