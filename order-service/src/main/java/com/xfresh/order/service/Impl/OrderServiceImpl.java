@@ -190,23 +190,27 @@ public class OrderServiceImpl implements OrderService {
 
     /* ========== 支付成功（发支付事件，不再同步确认库存） ========== */
     @Override
+    @Transactional
     public OrderDTO paySuccess(Long orderId) {
-        // 1) 查订单
         Order order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new BusinessException("订单不存在"));
 
-        // 2) 幂等/冲突判断
-        if (order.getStatus() == 2) {
-            return mapper.toDto(order);   // 已支付
-        }
-        if (order.getStatus() == 0) {
-            throw new DuplicateRequestException("订单已取消，无法确认支付");
-        }
-        if (order.getStatus() != 1) {
-            throw new BusinessException("订单状态非法，无法确认支付");
+        // 幂等/冲突判断
+        if (order.getStatus() == 2) return mapper.toDto(order);
+        if (order.getStatus() == 0) throw new DuplicateRequestException("订单已取消，无法确认支付");
+        if (order.getStatus() != 1) throw new BusinessException("订单状态非法，无法确认支付");
+
+        // 1) 原子把 1 -> 2（已支付）
+        int changed = orderRepo.updateStatusIfEquals(orderId, 1, 2, LocalDateTime.now());
+        if (changed == 0) {
+            // 并发下可能被超时/其它请求修改了，刷新判断一次
+            order = orderRepo.findById(orderId).orElseThrow();
+            if (order.getStatus() == 2) return mapper.toDto(order);
+            if (order.getStatus() == 0) throw new DuplicateRequestException("订单已取消，无法确认支付");
+            throw new BusinessException("并发冲突，请重试");
         }
 
-        // 构造事件明细
+        // 2) 构造事件明细（基于当前订单项）
         List<OrderEvent.Item> evItems = order.getItems().stream()
                 .map(oi -> OrderEvent.Item.builder()
                         .productId(oi.getProductId())
@@ -215,7 +219,7 @@ public class OrderServiceImpl implements OrderService {
                         .build())
                 .toList();
 
-        // 发 ORDER_PAID 事件（策略 A：不动本地状态）
+        // 3) 在同一事务里写出 ORDER_PAID 到 outbox
         OrderEvent paidEv = OrderEventBuilder.paidFrom(order, evItems);
         outboxPublisher.append(paidEv);
 

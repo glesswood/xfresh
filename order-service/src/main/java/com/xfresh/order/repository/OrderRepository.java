@@ -32,6 +32,16 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("update Order o set o.status = 2, o.updateTime = CURRENT_TIMESTAMP " +
             "where o.id = :id and o.status = 1")
     int markPaidIfPending(@Param("id") Long id);
+    @Modifying
+    @Query("""
+        update Order o
+           set o.status = :to, o.updateTime = :now
+         where o.id = :orderId and o.status = :from
+        """)
+    int updateStatusIfEquals(@Param("orderId") Long orderId,
+                             @Param("from") int from,
+                             @Param("to") int to,
+                             @Param("now") java.time.LocalDateTime now);
 
 
 

@@ -151,3 +151,72 @@ public class PayTimeoutListener {
     }
 }
 */
+
+package com.xfresh.order.consumer;
+
+import com.xfresh.dto.cmd.StockDeductCmd;
+import com.xfresh.order.config.RabbitPayTimeoutConfig;
+import com.xfresh.order.entity.OrderItem;
+import com.xfresh.order.outbox.OutboxPublisher;
+import com.xfresh.order.repository.OrderItemRepository;
+import com.xfresh.order.repository.OrderRepository;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Component;// PaymentTimeoutListener.java
+
+import java.util.Map;
+
+/// 注入订单明细仓库
+@RequiredArgsConstructor
+@Component
+@Slf4j
+public class PayTimeoutListener {
+    private final OrderRepository orderRepo;
+    private final OrderItemRepository orderItemRepo;  // ← 新增
+    private final OutboxPublisher outbox;
+
+    @Transactional
+    @RabbitListener(queues = RabbitPayTimeoutConfig.TIMEOUT_QUEUE)
+    public void onTimeout(@Payload Map<String,Object> body) {
+        Long orderId = ((Number) body.get("orderId")).longValue();
+
+        var order = orderRepo.findById(orderId).orElse(null);
+        if (order == null) { log.warn("[timeout] order not found {}", orderId); return; }
+        if (order.getStatus() != 1) { // 1=待支付
+            log.info("[timeout] already handled status={}, id={}", order.getStatus(), orderId);
+            return;
+        }
+
+        // 1) 并发安全地取消（你已有的保存也行，最好用条件更新）
+        order.setStatus(0); // 0=已取消
+        order.setUpdateTime(java.time.LocalDateTime.now());
+        orderRepo.save(order);
+
+        // 2) 查订单明细并映射为事件 items（非空）
+        var items = orderItemRepo.findByOrderId(orderId);
+        var eventItems = items.stream()
+                .map(i -> com.xfresh.event.OrderEvent.Item.builder()
+                        .productId(i.getProductId())
+                        .quantity(i.getQuantity())
+                        .price(i.getPrice())
+                        .build())
+                .toList();
+
+        // 3) 写取消事件到 outbox（带上 items，供 stock 回滚锁定）
+        var ev = com.xfresh.event.OrderEvent.builder()
+                .eventId(java.util.UUID.randomUUID().toString())
+                .type(com.xfresh.event.OrderEventType.ORDER_CANCELLED)
+                .orderId(orderId)
+                .userId(order.getUserId())
+                .totalAmount(order.getTotalAmount())
+                .occurredAt(java.time.LocalDateTime.now())
+                .items(eventItems) // ★ 关键：不能为 null
+                .build();
+        outbox.append(ev);
+
+        log.info("[timeout] cancelled & outbox appended, id={}, items={}", orderId, eventItems.size());
+    }
+}
