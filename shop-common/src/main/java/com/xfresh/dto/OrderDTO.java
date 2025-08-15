@@ -1,7 +1,9 @@
 package com.xfresh.dto;
 
 import com.xfresh.dto.cmd.StockDeductCmd;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,6 +24,15 @@ public class OrderDTO {
         return this.getItems().stream()
                 .map(i -> new StockDeductCmd.Item(i.getProductId(), i.getQuantity()))
                 .toList();
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ItemDTO {
+        private Long productId;
+        private Integer quantity;
+        private BigDecimal price;
     }
 
 }

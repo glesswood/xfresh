@@ -2,8 +2,10 @@ package com.xfresh.stock;
 
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+@EnableRabbit
 @SpringBootApplication(scanBasePackages = "com.xfresh")
 @OpenAPIDefinition(info =
 	@Info(title = "Product API", version = "1.0", description = "Documentation Product API v1.0")

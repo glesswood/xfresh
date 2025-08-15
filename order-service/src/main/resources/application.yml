@@ -71,3 +71,7 @@ resilience4j:
           - feign.FeignException
         ignoreExceptions:
           - com.xfresh.exception.BusinessException
+
+management:
+  tracing:
+    enabled: false

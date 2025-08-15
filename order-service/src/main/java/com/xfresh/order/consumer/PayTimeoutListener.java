@@ -1,10 +1,10 @@
+/*
 package com.xfresh.order.consumer;
 
-import com.xfresh.exception.BusinessException;
 import com.xfresh.dto.cmd.StockDeductCmd;
-import com.xfresh.order.entity.Order;
-import com.xfresh.order.entity.OrderItem;
-import com.xfresh.order.client.StockFeign;
+import com.xfresh.entity.Order;
+import com.xfresh.entity.OrderItem;
+//import com.xfresh.order.client.StockFeign;
 import com.xfresh.order.repository.OrderItemRepository;
 import com.xfresh.order.repository.OrderRepository;
 import jakarta.transaction.Transactional;
@@ -24,7 +24,7 @@ public class PayTimeoutListener {
 
     private final OrderRepository orderRepo;
     private final OrderItemRepository orderItemRepo;
-    private final StockFeign stockFeign;
+    //private final StockFeign stockFeign;
 
     // 并发 1-2：建议在 yml 里配（下文有）
     @Transactional
@@ -62,7 +62,92 @@ public class PayTimeoutListener {
                 .map(it -> new StockDeductCmd.Item(it.getProductId(), it.getQuantity()))
                 .toList();
 
-        stockFeign.rollback(orderId, revertItems);
+        //stockFeign.rollback(orderId, revertItems);
         log.info("订单超时已取消并回滚库存，id={}", orderId);
     }
+}*//*
+
+// order-service/src/main/java/com/xfresh/order/event/PayTimeoutListener.java
+package com.xfresh.order.consumer;
+
+import com.xfresh.dto.OrderDTO;
+import com.xfresh.event.OrderEvent;
+import com.xfresh.order.event.OrderEventBuilder;
+import com.xfresh.entity.Order;
+import com.xfresh.order.mapper.OrderMapper;
+import com.xfresh.order.outbox.OutboxPublisher;
+import com.xfresh.order.repository.OrderRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class PayTimeoutListener {
+
+    // 依赖：仅本地仓库 + Mapper + Outbox
+    private final OrderRepository orderRepo;
+    private final OrderMapper mapper;
+    private final OutboxPublisher outboxPublisher;
+
+    */
+/**
+     * 监听超时队列（延迟 5 分钟后投递的消息）
+     * 消息体负载就是 orderId（字符串或数字都行，下面用字符串转 Long）。
+     * 如果你有常量类，替换成常量即可；没有就直接写队列名字符串。
+     *//*
+
+    @RabbitListener(queues = "order.pay.timeout.q")
+    @Transactional
+    public void onTimeout(@Payload String orderIdStr) {
+        Long orderId = null;
+        try {
+            orderId = Long.valueOf(orderIdStr);
+        } catch (Exception e) {
+            log.warn("[pay-timeout] 无法解析订单ID，payload={}", orderIdStr);
+            return; // 丢弃这条异常消息
+        }
+
+        Order o = orderRepo.findById(orderId).orElse(null);
+        if (o == null) {
+            log.info("[pay-timeout] 订单不存在，orderId={}", orderId);
+            return;
+        }
+
+        // 幂等：只有“待支付(1)”才允许自动取消
+        if (o.getStatus() != 1) {
+            log.info("[pay-timeout] 非待支付状态，跳过。orderId={}, status={}", orderId, o.getStatus());
+            return;
+        }
+
+        // 条件更新：并发安全地把 1 -> 0
+        int changed = orderRepo.updateStatusIfEquals(orderId, 1, 0);
+        if (changed == 0) {
+            log.info("[pay-timeout] 状态已被并发修改，跳过。orderId={}", orderId);
+            return;
+        }
+
+        // 落一条取消事件到 Outbox（由 OutboxRelay 异步发 MQ）
+        OrderDTO dto = mapper.toDto(o);
+        List<OrderEvent.Item> eventItems = dto.getItems().stream()
+                .map(i -> OrderEvent.Item.builder()
+                        .productId(i.getProductId())
+                        .quantity(i.getQuantity())
+                        .price(i.getPrice())
+                        .build()
+                )
+                .toList();
+
+        OrderEvent ev = OrderEventBuilder.cancelledFrom(o, eventItems);
+        outboxPublisher.append(ev);
+
+        log.info("[pay-timeout] 订单已超时取消并写出取消事件。orderId={}", orderId);
+    }
 }
+*/

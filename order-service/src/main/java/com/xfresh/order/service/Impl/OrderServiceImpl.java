@@ -1,26 +1,22 @@
 package com.xfresh.order.service.Impl;   // impl 首字母小写习惯
 
 import com.xfresh.common.ApiResponse;
-import com.xfresh.exception.BusinessException;
-import com.xfresh.exception.DuplicateRequestException;
-import com.xfresh.order.client.ProductFeign;
-import com.xfresh.order.client.StockFeign;
 import com.xfresh.dto.OrderDTO;
 import com.xfresh.dto.ProductDTO;
 import com.xfresh.dto.cmd.OrderCreateCmd;
 import com.xfresh.dto.cmd.StockDeductCmd;
+import com.xfresh.event.OrderEvent;
+import com.xfresh.order.event.OrderEventBuilder;
+import com.xfresh.exception.BusinessException;
+import com.xfresh.exception.DuplicateRequestException;
+import com.xfresh.order.client.ProductFeign;
 import com.xfresh.order.entity.Order;
 import com.xfresh.order.entity.OrderItem;
-import com.xfresh.order.event.OrderEventPublisher;
 import com.xfresh.order.event.PayTimeoutSender;
 import com.xfresh.order.mapper.OrderMapper;
+import com.xfresh.order.outbox.OutboxPublisher;
 import com.xfresh.order.repository.OrderRepository;
 import com.xfresh.order.service.OrderService;
-import feign.FeignException;
-import feign.RetryableException;
-import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -47,43 +43,16 @@ import java.util.concurrent.TimeUnit;
 @Transactional
 public class OrderServiceImpl implements OrderService {
 
+    private final OutboxPublisher outboxPublisher;
     private final StringRedisTemplate stringRedis;
     private final OrderRepository orderRepo;
-    private final StockFeign stockFeign;
     private final OrderMapper mapper;
-    private final OrderEventPublisher publisher;
-    private final ProductFeign productFeign;
+    private final ProductFeign productFeign;      // 只做“读”价格
     private final PayTimeoutSender payTimeoutSender;
 
-    /* ========== 创建订单 ========== *//*
-    @Transactional
-    @Override
-    public OrderDTO create(OrderCreateCmd cmd) {
-
-        *//* 0) 组装扣库存命令 *//*
-        StockDeductCmd sdCmd = new StockDeductCmd(
-                cmd.getItems().stream()
-                        .map(i -> new StockDeductCmd.Item(i.getProductId(), i.getQuantity()))
-                        .toList()
-        );
-
-        *//* 1) 锁库存 —— 失败抛异常，事务整体回滚 *//*
-        stockFeign.lock(sdCmd);
-
-        *//* 2) 保存订单 *//*
-        Order entity = mapper.toEntity(cmd);
-        entity.setOrderNo(genOrderNo());
-        entity.setStatus(OrderStatus.PENDING);
-        Order saved = orderRepo.save(entity);
-
-        *//* 3) 返回 DTO *//*
-        return mapper.toDto(saved);
-    }
-*/
     /** 下单（幂等：userId + requestId） */
-    @Transactional
     @Override
-    public OrderDTO create(OrderCreateCmd cmd) {
+    public OrderDTO create(@Valid OrderCreateCmd cmd) {
 
         final Long userId  = cmd.getUserId();
         final String reqId = cmd.getRequestId(); // ★ 请求体里带的幂等键
@@ -99,11 +68,11 @@ public class OrderServiceImpl implements OrderService {
         if (Boolean.FALSE.equals(first)) {
             throw new DuplicateRequestException("重复下单，请勿重复提交");
         }
-        try {
-            // ② 预占库存（Lua 脚本在 stock-service）
-            stockFeign.lock(toDeductCmd(cmd));
 
-            // ③ 组装订单
+        try {
+            // （不再锁库）这里只做价格查询 + 计算金额 + 落订单
+
+            // ② 组装订单
             Order order = new Order();
             order.setUserId(userId);
             order.setOrderNo(genOrderNo());
@@ -139,7 +108,7 @@ public class OrderServiceImpl implements OrderService {
             order.setTotalAmount(totalAmount);
             order.setItems(items);
 
-            // ④ 落库（若唯一约束冲突，则兜底查询返回已有订单）
+            // ③ 落库（若唯一约束冲突，则兜底查询返回已有订单）
             Order saved;
             try {
                 saved = orderRepo.save(order);
@@ -148,15 +117,28 @@ public class OrderServiceImpl implements OrderService {
                         .orElseThrow(() -> dup);
             }
 
-            // ⑤ 幂等键写回结果（可选优化，让重复请求直接命中并可返回 id）
+            // ④ 幂等键写回结果（可选优化，让重复请求直接命中并可返回 id）
             stringRedis.opsForValue().set(redisKey, "OK:" + saved.getId(), Duration.ofMinutes(30));
 
-            // ⑥ 发布事件（MQ）
-            publisher.created(mapper.toDto(saved));
-            //7 发送延时消息
+            // ⑤ 发送“支付超时”延迟消息（你已有的逻辑）
             payTimeoutSender.send(saved.getId());
 
-            return mapper.toDto(saved);
+            // ⑥ Outbox 记录 ORDER_CREATED（可选，如果你需要创建事件）
+            OrderDTO dto = mapper.toDto(saved);
+            // 生成事件明细（从实体映射，避免 DTO 命名差异）
+            List<OrderEvent.Item> evItems = saved.getItems().stream()
+                    .map(oi -> OrderEvent.Item.builder()
+                            .productId(oi.getProductId())
+                            .quantity(oi.getQuantity())
+                            .price(oi.getPrice())
+                            .build())
+                    .toList();
+
+// 构建并写入 outbox
+            OrderEvent createdEv = OrderEventBuilder.createdFrom(saved, evItems);
+            outboxPublisher.append(createdEv);
+
+            return dto;
 
         } catch (Exception e) {
             // 失败允许重试：删同一个 redisKey
@@ -164,7 +146,6 @@ public class OrderServiceImpl implements OrderService {
             throw e;
         }
     }
-
 
     /* ========== 查询 ========== */
     @Override
@@ -179,19 +160,35 @@ public class OrderServiceImpl implements OrderService {
         return orderRepo.findByUserId(userId, pageable).map(mapper::toDto);
     }
 
-    /* ========== 取消订单 ========== */
+    /* ========== 取消订单（发取消事件，不再同步回滚库存） ========== */
     @Override
     public OrderDTO cancel(Long id) {
-        Order o = orderRepo.findById(id).orElseThrow();
-        if (o.getStatus() != 1) throw new IllegalStateException("非待支付订单不能取消");
-        o.setStatus(0);                                // 0=已取消
+        Order o = orderRepo.findById(id).orElseThrow(() -> new BusinessException("订单不存在"));
+        if (o.getStatus() != 1) {
+            throw new BusinessException("非待支付订单不能取消");
+        }
+
+        // 先改状态为取消
+        o.setStatus(0);
         orderRepo.save(o);
 
-        stockFeign.rollback(id, o.itemsToStockCmd());  // 归还库存
-        publisher.cancelled(mapper.toDto(o));
+        // 构造事件明细
+        List<OrderEvent.Item> evItems = o.getItems().stream()
+                .map(oi -> OrderEvent.Item.builder()
+                        .productId(oi.getProductId())
+                        .quantity(oi.getQuantity())
+                        .price(oi.getPrice())
+                        .build())
+                .toList();
+
+        // 发 ORDER_CANCELLED 事件
+        OrderEvent cancelledEv = OrderEventBuilder.cancelledFrom(o, evItems);
+        outboxPublisher.append(cancelledEv);
+
         return mapper.toDto(o);
     }
 
+    /* ========== 支付成功（发支付事件，不再同步确认库存） ========== */
     @Override
     public OrderDTO paySuccess(Long orderId) {
         // 1) 查订单
@@ -200,96 +197,29 @@ public class OrderServiceImpl implements OrderService {
 
         // 2) 幂等/冲突判断
         if (order.getStatus() == 2) {
-            // 已支付：幂等返回
-            return mapper.toDto(order);
+            return mapper.toDto(order);   // 已支付
         }
         if (order.getStatus() == 0) {
-            // 已取消：冲突
             throw new DuplicateRequestException("订单已取消，无法确认支付");
         }
         if (order.getStatus() != 1) {
             throw new BusinessException("订单状态非法，无法确认支付");
         }
 
-        // 3) 取订单明细，构造确认库存的 items（不要信客户端）
-        List<OrderItem> orderItems = order.getItems(); // 若没配置关联，改用 repo 查询
-        // List<OrderItem> orderItems = orderItemRepo.findByOrderId(orderId);
-
-        List<StockDeductCmd.Item> items = orderItems.stream()
-                .map(oi -> new StockDeductCmd.Item(oi.getProductId(), oi.getQuantity()))
+        // 构造事件明细
+        List<OrderEvent.Item> evItems = order.getItems().stream()
+                .map(oi -> OrderEvent.Item.builder()
+                        .productId(oi.getProductId())
+                        .quantity(oi.getQuantity())
+                        .price(oi.getPrice())
+                        .build())
                 .toList();
 
-        // 4) 调用 stock-service 的 confirm (锁定 -> 真扣)
-        try {
-            ApiResponse<Void> resp = stockFeign.confirm(orderId, items);
-            if (resp == null || resp.getCode() != 0) throw new BusinessException("确认库存失败");
-        } catch (FeignException e) {
-            // 转成业务异常，交给全局异常处理器返回 502/503 或 500
-            throw new BusinessException("库存服务不可用，请稍后重试");
-        }
+        // 发 ORDER_PAID 事件（策略 A：不动本地状态）
+        OrderEvent paidEv = OrderEventBuilder.paidFrom(order, evItems);
+        outboxPublisher.append(paidEv);
 
-        // 5) 条件更新：把状态从 1 -> 2，只允许成功一次（并发安全 & 幂等）
-        int changed = orderRepo.updateStatusIfEquals(orderId, 1, 2);
-        if (changed == 0) {
-            // 并发下可能别的线程已更新，查最新返回
-            Order fresh = orderRepo.findById(orderId)
-                    .orElseThrow(() -> new BusinessException("订单不存在"));
-            return mapper.toDto(fresh);
-        }
-
-
-        // 6) 返回
-        Order updated = orderRepo.findById(orderId)
-                .orElseThrow(() -> new BusinessException("订单不存在"));
-        return mapper.toDto(updated);
-    }
-
-    /** 封装“锁库”远程调用，附带重试 + 断路器 */
-    @Retry(name = "stockLock")
-    @CircuitBreaker(name = "stock", fallbackMethod = "lockFallback")
-    protected void lockStockWithResilience(StockDeductCmd cmd) {
-        ApiResponse<Void> resp = stockFeign.lock(cmd);
-        if (resp == null || resp.getCode() != 0) {
-            throw new BusinessException("锁定库存失败");
-        }
-    }
-
-    /** fallback 签名：同参数 + Throwable，返回类型同原方法（void） */
-    protected void lockFallback(StockDeductCmd cmd, Throwable ex) {
-        // 记日志（不要打印堆栈太吵，除非打到 debug）
-        log.warn("[stock-lock] fallback triggered, cmd={}, cause={}", cmd, ex.toString());
-        log.error("[lockFallback] 调用库存服务失败, cmd={}, exType={}, msg={}",
-                cmd, ex.getClass().getName(), ex.getMessage(), ex);
-
-        // 尽量还原真实根因
-        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-
-        // 1) 断路器打开（直接拒绝调用）
-        if (cause instanceof CallNotPermittedException) {
-            throw new BusinessException("库存服务暂不可用（熔断中），请稍后再试");
-        }
-
-        // 2) Feign 连接/超时等可重试类问题（已重试仍失败）
-        if (cause instanceof RetryableException) {
-            throw new BusinessException("库存服务网络异常，请稍后重试");
-        }
-
-        // 3) 下游返回了 HTTP 错误
-        if (cause instanceof FeignException fe) {
-            int status = fe.status();
-            // 按你的 stock-service 约定微调：
-            if (status == 409) { // 比如库存不足映射为 409
-                throw new BusinessException("库存不足");
-            }
-            if (status >= 500) {
-                throw new BusinessException("库存服务开小差了，请稍后再试");
-            }
-            // 4xx 其它情况
-            throw new BusinessException("调用库存服务失败(" + status + ")");
-        }
-
-        // 4) 其它未归类异常
-        throw new BusinessException("锁定库存失败：" + cause.getMessage());
+        return mapper.toDto(order);
     }
 
     /* ========== 工具方法 ========== */
@@ -304,11 +234,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private StockDeductCmd toDeductCmd(OrderCreateCmd cmd) {
-        StockDeductCmd sdCmd = new StockDeductCmd(
+        return new StockDeductCmd(
                 cmd.getItems().stream()
                         .map(i -> new StockDeductCmd.Item(i.getProductId(), i.getQuantity()))
                         .toList()
         );
-        return sdCmd;
     }
 }

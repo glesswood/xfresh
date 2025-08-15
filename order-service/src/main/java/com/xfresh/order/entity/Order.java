@@ -1,5 +1,6 @@
 package com.xfresh.order.entity;
 import com.xfresh.dto.cmd.StockDeductCmd;
+import jakarta.persistence.Entity;
 import jakarta.persistence.*;
 import lombok.Data;
 

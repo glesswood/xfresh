@@ -46,9 +46,5 @@ public class MqConfig {
         return BindingBuilder.bind(timeoutQ())
                 .to(orderExchange).with("order.timeout");
     }
-    /** 使用 Jackson 把 POJO ↔︎ JSON */
-    @Bean
-    public MessageConverter jackson2Converter(ObjectMapper mapper) {
-        return new Jackson2JsonMessageConverter(mapper);
-    }
+
 }

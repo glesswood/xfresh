@@ -1,3 +1,4 @@
+/*
 package com.xfresh.order.client;
 
 import com.xfresh.common.ApiResponse;
@@ -25,4 +26,4 @@ public interface StockFeign {
     ApiResponse<Void> rollback(@RequestParam("orderId") Long orderId,
                                @RequestBody List<StockDeductCmd.Item> items);
 
-}
+}*/

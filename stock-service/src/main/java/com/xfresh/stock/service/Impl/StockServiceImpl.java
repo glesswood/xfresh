@@ -72,7 +72,7 @@ public class StockServiceImpl implements StockService {
                 throw new StockException("库存不足 (productId=" + i.getProductId() + ")");
 
             // ret ≥ 0 ⇒ 扣减成功，DB 锁定量 +quantity
-            repo.addLocked(i.getProductId(), i.getQuantity());
+            repo.addLocked(i.getProductId(), i.getQuantity(),LocalDateTime.now());
         }
     }
 

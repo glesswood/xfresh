@@ -1,3 +1,4 @@
+/*
 package com.xfresh.order.config.feign;
 
 
@@ -38,4 +39,4 @@ public class StockFeignFallbackFactory implements FallbackFactory<StockFeign> {
             }
         };
     }
-}
+}*/
