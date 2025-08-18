@@ -1,60 +1,70 @@
 package com.xfresh.stock.application.service.Impl;
 
 import com.xfresh.event.OrderEvent;
-import com.xfresh.stock.domain.exception.StockException;
-import com.xfresh.stock.domain.repository.StockRepository;
 import com.xfresh.stock.application.service.OrderEventApplyService;
+import com.xfresh.stock.domain.StockDomainHandler;
+import com.xfresh.stock.domain.repository.StockRepository;
+import com.xfresh.stock.infrastructure.cache.StockCacheService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-
-/**
- * 把订单事件“应用”到库存：锁定/确认扣减/回滚
- * 这里直接调用你的 StockRepository 的原子更新方法(Lua/SQL)即可
- */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderEventApplyServiceImpl implements OrderEventApplyService {
 
-    private final StockRepository repo;
+    private final StockDomainHandler domain;
+    private final StockRepository stockRepo;
+    private final StockCacheService cache;
 
-    @Transactional
     @Override
+    @Transactional
     public void onOrderCreated(OrderEvent ev) {
-        // 锁定库存：对 ev.items 遍历调用 repo.lock(...) 或 Lua 脚本
-        ev.getItems().forEach(it -> {
-            int changed = repo.addLocked(it.getProductId(), it.getQuantity(),LocalDateTime.now());
-            if (changed == 0) {
-                throw new StockException("库存不足 (productId=" + it.getProductId() + ")");
-            }
-        });
+        // 1) 预热
+        ev.getItems().forEach(it ->
+                stockRepo.findById(it.getProductId()).ifPresent(s ->
+                        cache.warmIfAbsent(s.getProductId(), s.getTotalStock() - s.getLockedStock())
+                )
+        );
+        // 2) Redis 预扣（快速失败）
+        for (var it : ev.getItems()) {
+            boolean ok = cache.tryReserve(it.getProductId(), it.getQuantity());
+            if (!ok) throw new RuntimeException("库存不足(redis) pid=" + it.getProductId());
+        }
+        // 3) DB 条件加锁为准；失败则补偿 Redis
+        try {
+            var list = ev.getItems().stream()
+                    .map(i -> new StockDomainHandler.SkuQty(i.getProductId(), i.getQuantity()))
+                    .toList();
+            domain.lock(list);
+        } catch (RuntimeException e) {
+            ev.getItems().forEach(it -> cache.release(it.getProductId(), it.getQuantity()));
+            throw e;
+        }
     }
 
-    @Transactional
     @Override
+    @Transactional
     public void onOrderPaid(OrderEvent ev) {
-        // 真正扣减：totalStock-=qty, lockedStock-=qty（你的 confirmDeduct 方法）
-        ev.getItems().forEach(it -> {
-            int changed = repo.confirmDeduct(it.getProductId(), it.getQuantity(), LocalDateTime.now());
-            if (changed == 0) {
-                throw new StockException("确认扣减失败 (productId=" + it.getProductId() + ")");
-            }
-        });
+        var list = ev.getItems().stream()
+                .map(i -> new StockDomainHandler.SkuQty(i.getProductId(), i.getQuantity()))
+                .toList();
+        domain.confirm(list);
+        // 可选异步校正：根据 DB 可用，覆盖 Redis
+        // ev.getItems().forEach(it ->
+        //     stockRepo.findById(it.getProductId()).ifPresent(s ->
+        //         cache.setAvail(s.getProductId(), s.getTotalStock() - s.getLockedStock())
+        //     ));
     }
 
-    @Transactional
     @Override
+    @Transactional
     public void onOrderCancelled(OrderEvent ev) {
-        // 回滚锁定：lockedStock-=qty（归还至可用库存）
-        ev.getItems().forEach(it -> {
-            int changed = repo.rollbackLock(it.getProductId(), it.getQuantity(),LocalDateTime.now());
-            if (changed == 0) {
-                throw new StockException("回滚失败 (productId=" + it.getProductId() + ")");
-            }
-        });
+        var list = ev.getItems().stream()
+                .map(i -> new StockDomainHandler.SkuQty(i.getProductId(), i.getQuantity()))
+                .toList();
+        domain.rollback(list);
+        // DB 成功后补偿 Redis
+        ev.getItems().forEach(it -> cache.release(it.getProductId(), it.getQuantity()));
     }
 }
