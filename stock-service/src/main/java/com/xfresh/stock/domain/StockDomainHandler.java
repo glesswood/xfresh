@@ -1,7 +1,7 @@
 // domain/StockDomainHandler.java
 package com.xfresh.stock.domain;
 
-import com.xfresh.stock.repository.StockRepository;
+import com.xfresh.stock.domain.repository.StockRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

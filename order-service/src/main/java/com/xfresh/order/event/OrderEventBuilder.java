@@ -1,9 +1,8 @@
 package com.xfresh.order.event;
 
-import com.xfresh.dto.OrderDTO;
 import com.xfresh.event.OrderEvent;
 import com.xfresh.event.OrderEventType;
-import com.xfresh.order.entity.Order;
+import com.xfresh.order.domain.entity.Order;
 
 import java.time.LocalDateTime;
 import java.util.List;

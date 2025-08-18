@@ -2,8 +2,8 @@ package com.xfresh.order.mapper;
 
 import com.xfresh.dto.OrderDTO;
 import com.xfresh.dto.cmd.OrderCreateCmd;
-import com.xfresh.order.entity.Order;
-import com.xfresh.order.entity.OrderItem;
+import com.xfresh.order.domain.entity.Order;
+import com.xfresh.order.domain.entity.OrderItem;
 import org.mapstruct.*;
 
 import java.util.Collections;
