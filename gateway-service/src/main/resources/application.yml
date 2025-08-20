@@ -1,11 +1,77 @@
-spring:
-  config:
-    import: "optional:configserver:http://config-service:8088"
-    activate:
-      on-profile: docker
----
+server:
+  port: 8080
+
 spring:
   application:
     name: gateway-service
-  config:
-    import: "optional:configserver:http://localhost:8088"
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848         # ← 你的 Nacos 地址
+        namespace: 9aeeee1d-d284-44f8-91f2-d2c603fe916b
+        group: DEFAULT_GROUP
+
+    gateway:
+      discovery:
+        locator:
+          enabled: false                    # 不用自动发现路由，手动更清晰
+          lower-case-service-id: true
+
+      default-filters:
+        # 给每个请求加一个 TraceId，后端能从 Header 取出串联日志
+        - AddRequestHeader=X-Trace-Id, "#{T(java.util.UUID).randomUUID().toString()}"
+
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+      routes:
+        # /api/product/** -> product-service
+        - id: product-route
+          uri: lb://product-service
+          predicates:
+            - Path=/api/product/**
+          filters:
+            - StripPrefix=1
+
+        # /api/order/** -> order-service
+        - id: order-route
+          uri: lb://order-service
+          predicates:
+            - Path=/api/order/**
+          filters:
+            - StripPrefix=1
+
+        # /api/stock/** -> stock-service
+        - id: stock-route
+          uri: lb://stock-service
+          predicates:
+            - Path=/api/stock/**
+          filters:
+            - StripPrefix=1
+
+# （可选）基于 Redis 的网关限流，如果启用需在 pom 加 reactive-redis 依赖
+# spring:
+#   cloud:
+#     gateway:
+#       routes:
+#         - id: order-route
+#           uri: lb://order-service
+#           predicates: [ Path=/api/order/** ]
+#           filters:
+#             - StripPrefix=1
+#             - name: RequestRateLimiter
+#               args:
+#                 redis-rate-limiter.replenishRate: 10    # 每秒令牌
+#                 redis-rate-limiter.burstCapacity: 20    # 突发上限
+#                 key-resolver: "#{@ipKeyResolver}"       # 见下方 Bean
+#
+# 自定义 KeyResolver 示例（放到 GatewayApplication 同包）：
+# @Bean("ipKeyResolver")
+# public KeyResolver ipKeyResolver() {
+#   return exchange -> Mono.just(exchange.getRequest().getRemoteAddress().getHostString());
+# }
